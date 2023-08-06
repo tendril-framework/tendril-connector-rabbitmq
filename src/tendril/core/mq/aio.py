@@ -1,11 +1,16 @@
 
 
 import asyncio
-import atexit
+import importlib
 from functools import wraps
+from contextlib import asynccontextmanager
 
-from .async_base import GenericMQAsyncClient
+from .aio_base import GenericMQAsyncClient
+from tendril.config import MQ_ENABLED
 from tendril.config import APISERVER_ENABLED
+from tendril.utils.versions import get_namespace_package_names
+from tendril.utils import log
+logger = log.get_logger(__name__, log.DEBUG)
 
 
 if True:
@@ -17,13 +22,15 @@ if True:
 def with_mq_client(func):
     @wraps(func)
     async def wrapper(*args, **kwargs):
-        mq = kwargs.pop('mq', None)
-        if not mq:
-            manager = await MQManager.get_instance()
-            async with manager.get_channel() as channel:
-                mq = MQClientClass(channel)
-        kwargs['mq'] = mq
-        return await func(*args, **kwargs)
+        if 'mq' in kwargs.keys() and kwargs['mq']:
+            result = await func(*args, **kwargs)
+            return result
+        manager = await MQManager.get_instance()
+        async with manager.get_channel() as channel:
+            mq = MQClientClass(channel)
+            kwargs['mq'] = mq
+            result = await func(*args, **kwargs)
+            return result
     return wrapper
 
 
@@ -34,9 +41,22 @@ async def example(mq: GenericMQAsyncClient):  # Accept a client object as an arg
     print(message)
 
 
+async def install_topology(prefix='tendril.core.topology'):
+    logger.info("Loading MQ Topologies from '{0}.*'".format(prefix))
+    for modname in get_namespace_package_names(prefix):
+        try:
+            globals()[modname] = importlib.import_module(modname)
+            if hasattr(globals()[modname], 'create_mq_topology'):
+                logger.debug(f"Installing MQ Topology from {modname}")
+                await globals()[modname].create_mq_topology()
+        except ImportError as e:
+            logger.debug(e)
+
+
 async def startup():
     manager = await MQManager.get_instance()
     await manager.init(loop=asyncio.get_running_loop())
+    await install_topology()
 
 
 async def shutdown():
@@ -44,31 +64,15 @@ async def shutdown():
     await manager.close()
 
 
-if APISERVER_ENABLED:
-    # Register the startup and shutdown functions as app events
-    from tendril.apiserver.core import apiserver
-    apiserver.on_event("startup")(startup)
-    apiserver.on_event("shutdown")(shutdown)
-else:
-    # TODO This doesn't actually work.
-    #  Find a serious use case and a corresponding solution.
-    # asyncio.run(startup())
-    # atexit.register(asyncio.run, shutdown())
-    pass
-
-
-# # Define an endpoint to send a message to a queue
-# @app.post("/send/{queue}")
-# async def send_message(queue: str, data: str, background_tasks: BackgroundTasks):
-#     # Run the test function as a background task using the background_tasks object
-#     await run_background_task(background_tasks, test)
-#     # Return a success message as JSON response
-#     return {"message": "Message sent successfully"}
-#
-# # Define an endpoint to receive a message from a queue
-# @app.get("/receive/{queue}")
-# async def receive_message(queue: str, background_tasks: BackgroundTasks):
-#     # Run the test function as a background task using the background_tasks object
-#     await run_background_task(background_tasks, test)
-#     # Return a success message as JSON response
-#     return {"message": "Message received successfully"}
+if MQ_ENABLED:
+    if APISERVER_ENABLED:
+        # Register the startup and shutdown functions as app events
+        from tendril.apiserver.core import apiserver
+        apiserver.on_event("startup")(startup)
+        apiserver.on_event("shutdown")(shutdown)
+    else:
+        # TODO This doesn't actually work.
+        #  Find a serious use case and a corresponding solution.
+        # asyncio.run(startup())
+        # atexit.register(asyncio.run, shutdown())
+        pass

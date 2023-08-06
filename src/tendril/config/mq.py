@@ -19,7 +19,7 @@ Paths Configuration Options
 ===========================
 """
 
-# import pika
+import pika
 
 from tendril.utils.config import ConfigOption
 from tendril.utils.config import ConfigOptionConstruct
@@ -33,19 +33,26 @@ depends = ['tendril.config.core',
 class RabbitMQConnectionParameters(ConfigOptionConstruct):
     @property
     def value(self):
-        return None
-        # return pika.ConnectionParameters(
-        #     host=self.ctx["MQ{}_SERVER_HOST".format(self._parameters)],
-        #     port=self.ctx["MQ{}_SERVER_PORT".format(self._parameters)],
-        #     virtual_host=self.ctx["MQ{}_SERVER_VIRTUALHOST".format(self._parameters)],
-        #     credentials=pika.PlainCredentials(
-        #         self.ctx["MQ{}_SERVER_USERNAME".format(self._parameters)],
-        #         self.ctx["MQ{}_SERVER_PASSWORD".format(self._parameters)])
-        # )
+        return pika.ConnectionParameters(
+            host=self.ctx["MQ{}_SERVER_HOST".format(self._parameters)],
+            port=self.ctx["MQ{}_SERVER_PORT".format(self._parameters)],
+            virtual_host=self.ctx["MQ{}_SERVER_VIRTUALHOST".format(self._parameters)],
+            credentials=pika.PlainCredentials(
+                self.ctx["MQ{}_SERVER_USERNAME".format(self._parameters)],
+                self.ctx["MQ{}_SERVER_PASSWORD".format(self._parameters)])
+        )
 
 
 def _rabbitmq_config_template(mq_code):
     return [
+        ConfigOption(
+            'MQ{}_ENABLED'.format(mq_code),
+            'False',
+            'Whether to enable the {} MQ Server. This only controls whether tendril '
+            'will proactively attempt to establish an MQ Server connection. If code '
+            'otherwise results in an attemt to make the connection, this will not '
+            'stop it.'.format(mq_code)
+        ),
         ConfigOption(
             'MQ{}_PROVIDER'.format(mq_code),
             '"amqp"',
@@ -81,7 +88,7 @@ def _rabbitmq_config_template(mq_code):
         ),
         ConfigOption(
             'MQ{}_SERVER_SSL'.format(mq_code),
-            "True",
+            "False",
             "Whether to use SSL when connecting to "
             "the {} MQ Server.".format(mq_code)
         ),

@@ -12,8 +12,11 @@ class GenericMQAsyncManager:
 
 
 class GenericMQAsyncClient(object):
-    async def send_message(self, queue: str, data: str):
+    async def publish(self, key: str, data: str):
         raise NotImplementedError
 
-    async def receive_message(self, queue: str, no_wait=False, no_ack=False):
+    async def consume(self, key: str, on_message, no_ack=True):
+        raise NotImplementedError
+
+    async def create_worker_queue(self, key: str, topic: str):
         raise NotImplementedError

@@ -29,6 +29,7 @@ def read(fname):
 
 
 core_dependencies = [
+    'pika',
     'aio-pika',
 ]
 
