@@ -56,7 +56,7 @@ class RabbitMQAsyncManager(GenericMQAsyncManager):
             logger.debug(f"Creating the {MQ_SERVER_EXCHANGE} exchange on "
                          f"RabbitMQ at {MQ_SERVER_PARAMETERS.host}")
             _exchange = await channel.declare_exchange(
-                MQ_SERVER_EXCHANGE, ExchangeType.TOPIC
+                MQ_SERVER_EXCHANGE, ExchangeType.TOPIC, durable=True
             )
 
     async def close(self):
