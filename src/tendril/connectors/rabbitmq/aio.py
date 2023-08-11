@@ -15,7 +15,7 @@ from tendril.config import MQ_SERVER_SSL
 from tendril.config import MQ_SERVER_EXCHANGE
 
 from tendril.utils import log
-logger = log.get_logger(__name__, log.DEBUG)
+logger = log.get_logger(__name__, log.DEFAULT)
 
 
 if MQ_SERVER_SSL:

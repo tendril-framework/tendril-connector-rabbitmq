@@ -10,7 +10,7 @@ from tendril.config import MQ_ENABLED
 from tendril.config import APISERVER_ENABLED
 from tendril.utils.versions import get_namespace_package_names
 from tendril.utils import log
-logger = log.get_logger(__name__, log.DEBUG)
+logger = log.get_logger(__name__, log.DEFAULT)
 
 
 if True:
