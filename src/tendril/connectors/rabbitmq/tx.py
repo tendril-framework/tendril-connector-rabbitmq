@@ -244,6 +244,6 @@ class PikaFactory(protocol.ReconnectingClientFactory, TwistedLoggerMixin):
             self.client.read(exchange, routing_key, callback, queue, exclusive, durable)
 
 
-service = PikaService
-protocol = PikaProtocol
-factory = PikaFactory
+MQService = PikaService
+MQProtocol = PikaProtocol
+MQFactory = PikaFactory

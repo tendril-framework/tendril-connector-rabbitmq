@@ -31,6 +31,9 @@ def read(fname):
 core_dependencies = [
     'pika',
     'aio-pika',
+    'twisted',
+    'pyopenssl',
+    'service_identity',
 ]
 
 install_requires = core_dependencies + ['wheel']
