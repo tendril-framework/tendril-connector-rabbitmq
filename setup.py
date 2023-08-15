@@ -34,6 +34,7 @@ core_dependencies = [
     'twisted',
     'pyopenssl',
     'service_identity',
+    'tendril-tx-utils-core',
 ]
 
 install_requires = core_dependencies + ['wheel']
