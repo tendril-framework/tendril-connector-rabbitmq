@@ -243,6 +243,8 @@ class PikaFactory(protocol.ReconnectingClientFactory, TwistedLoggerMixin):
         if self.client is not None:
             self.client.read(exchange, routing_key, callback, queue, exclusive, durable)
 
+    def __repr__(self):
+        return f"<{self.__class__.__name__}>"
 
 MQService = PikaService
 MQProtocol = PikaProtocol
