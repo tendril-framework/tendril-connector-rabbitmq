@@ -84,7 +84,8 @@ def _rabbitmq_config_template(mq_code):
         ConfigOption(
             'MQ{}_SERVER_PASSWORD'.format(mq_code),
             "'tendril'",
-            "Server Password to use for the {} MQ Server.".format(mq_code)
+            "Server Password to use for the {} MQ Server.".format(mq_code),
+            masked=True
         ),
         ConfigOption(
             'MQ{}_SERVER_SSL'.format(mq_code),
