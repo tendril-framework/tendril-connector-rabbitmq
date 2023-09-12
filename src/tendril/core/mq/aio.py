@@ -71,8 +71,6 @@ if MQ_ENABLED:
         apiserver.on_event("startup")(startup)
         apiserver.on_event("shutdown")(shutdown)
     else:
-        # TODO This doesn't actually work.
-        #  Find a serious use case and a corresponding solution.
-        # asyncio.run(startup())
+        asyncio.get_event_loop().run_until_complete(startup())
         # atexit.register(asyncio.run, shutdown())
         pass
