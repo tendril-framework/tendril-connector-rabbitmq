@@ -1,5 +1,6 @@
 
 
+from functools import partial
 from pika import ConnectionParameters
 from contextlib import asynccontextmanager
 from aio_pika import Message
@@ -10,9 +11,12 @@ from aio_pika.pool import Pool
 
 from tendril.core.mq.aio_base import GenericMQAsyncClient
 from tendril.core.mq.aio_base import GenericMQAsyncManager
-from tendril.config import MQ_SERVER_PARAMETERS
+from tendril.core.mq.aio_base import MQServerNotRecognized
+from tendril.core.mq.aio_base import MQServerNotEnabled
+
+from tendril.config import MQ_SERVER_CODES
 from tendril.config import MQ_SERVER_SSL
-from tendril.config import MQ_SERVER_EXCHANGE
+from tendril import config
 
 from tendril.utils import log
 logger = log.get_logger(__name__, log.DEFAULT)
@@ -23,9 +27,9 @@ if MQ_SERVER_SSL:
 else:
     scheme = 'amqp'
 
-p: ConnectionParameters = MQ_SERVER_PARAMETERS
-connection_string = f"{scheme}://{p.credentials.username}:{p.credentials.password}" \
-                    f"@{p.host}:{p.port}/{p.virtual_host}"
+def _build_conn_string(p: ConnectionParameters):
+    return f"{scheme}://{p.credentials.username}:{p.credentials.password}" \
+           f"@{p.host}:{p.port}/{p.virtual_host}"
 
 
 class RabbitMQAsyncManager(GenericMQAsyncManager):
@@ -37,50 +41,78 @@ class RabbitMQAsyncManager(GenericMQAsyncManager):
             cls._instance = RabbitMQAsyncManager()
         return cls._instance
 
-    async def init(self, loop):
+    async def init_connection(self, loop, code):
         # Use the connect function to create a connection object with the default parameters
         # The connection object will be reused until it is closed explicitly
-        logger.info(f"Connecting to RabbitMQ at {MQ_SERVER_PARAMETERS.host}")
-        logger.debug(f"Using connection string {connection_string}")
-        self.connection = await connect_robust(url=connection_string, loop=loop,
-                                               client_properties={'name': log.identifier})
+        mq_server_parameters = getattr(config, 'MQ{}_SERVER_PARAMETERS'.format(code))
+        connection_string = _build_conn_string(mq_server_parameters)
+        logger.info(f"Connecting to RabbitMQ at {mq_server_parameters.host}")
+        connection = await connect_robust(url=connection_string, loop=loop,
+                                          client_properties={'name': log.identifier})
+        return connection
 
-        async def get_channel():
-            logger.debug(f"Creating a channel to RabbitMQ at {MQ_SERVER_PARAMETERS.host}")
-            channel = await self.connection.channel()
-            await channel.set_qos(prefetch_count=1)
-            return channel
-        self.channel_pool: Pool = Pool(get_channel, max_size=10, loop=loop)
-
-        async with self.channel_pool.acquire() as channel:
-            logger.debug(f"Creating the {MQ_SERVER_EXCHANGE} exchange on "
-                         f"RabbitMQ at {MQ_SERVER_PARAMETERS.host}")
+    async def init_exchange(self, code):
+        async with self.channel_pools[code or 'default'].acquire() as channel:
+            mq_server_parameters = getattr(config, 'MQ{}_SERVER_PARAMETERS'.format(code))
+            mq_server_exchange = getattr(config, 'MQ{}_SERVER_EXCHANGE'.format(code))
+            logger.debug(f"Creating the {mq_server_exchange} exchange on "
+                         f"RabbitMQ at {mq_server_parameters.host}")
             _exchange = await channel.declare_exchange(
-                MQ_SERVER_EXCHANGE, ExchangeType.TOPIC, durable=True
+                mq_server_exchange, ExchangeType.TOPIC, durable=True
             )
 
+    async def init(self, loop):
+        self.connections = {}
+        self.channel_pools = {}
+
+        async def get_channel(code):
+            mq_server_parameters = getattr(config, 'MQ{}_SERVER_PARAMETERS'.format(code))
+            logger.debug(f"Creating a channel to RabbitMQ at {mq_server_parameters.host}")
+            channel = await self.connections[code or 'default'].channel()
+            await channel.set_qos(prefetch_count=1)
+            return channel
+
+        for code in MQ_SERVER_CODES:
+            enabled = getattr(config, 'MQ{}_ENABLED'.format(code))
+            if not enabled:
+                continue
+            self.connections[code or 'default'] = await self.init_connection(loop, code)
+            self.channel_pools[code or 'default']: Pool = Pool(partial(get_channel, code), max_size=10, loop=loop)
+            await self.init_exchange(code)
+
     async def close(self):
-        logger.info(f"Closing the channel pool to RabbitMQ at {MQ_SERVER_PARAMETERS.host}")
-        await self.channel_pool.close()
-        self.channel_pool = None
-        logger.info(f"Disconnecting from RabbitMQ at {MQ_SERVER_PARAMETERS.host}")
-        await self.connection.close()
-        self.connection = None
+        for code in MQ_SERVER_CODES:
+            enabled = getattr(config, 'MQ{}_ENABLED'.format(code))
+            if not enabled:
+                continue
+            mq_server_parameters = getattr(config, 'MQ{}_SERVER_PARAMETERS'.format(code))
+            logger.info(f"Closing the channel pool to RabbitMQ at {mq_server_parameters.host}")
+            await self.channel_pools[code or 'default'].close()
+            self.channel_pools[code or 'default'] = None
+            logger.info(f"Disconnecting from RabbitMQ at {mq_server_parameters.host}")
+            await self.connections[code or 'default'].close()
+            self.connections[code or 'default'] = None
 
     @asynccontextmanager
-    async def get_channel(self):
-        async with self.channel_pool.acquire() as channel:
+    async def get_channel(self, code='default'):
+        if code not in MQ_SERVER_CODES and code != 'default':
+            raise MQServerNotRecognized(code=code)
+        if code not in self.channel_pools.keys():
+            raise MQServerNotEnabled(code=code)
+        async with self.channel_pools[code].acquire() as channel:
             yield channel
 
 
 class RabbitMQAsyncClient(GenericMQAsyncClient):
-    def __init__(self, channel):
+    def __init__(self, channel, code='default'):
         self.channel = channel
+        self._code = code
         self._exchange = None
 
     async def exchange(self):
         if not self._exchange:
-            self._exchange = await self.channel.get_exchange(MQ_SERVER_EXCHANGE)
+            mq_server_exchange = getattr(config, 'MQ{}_SERVER_EXCHANGE'.format(self._code))
+            self._exchange = await self.channel.get_exchange(mq_server_exchange)
         return self._exchange
 
     async def publish(self, key: str, data: str):

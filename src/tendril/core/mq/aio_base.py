@@ -1,5 +1,20 @@
 
 
+
+class MQServerError(Exception):
+    def __init__(self, code):
+        self.code = code
+
+    def __str__(self):
+        return f'code={self.code}'
+
+class MQServerNotRecognized(MQServerError):
+    pass
+
+class MQServerNotEnabled(MQServerError):
+    pass
+
+
 class GenericMQAsyncManager:
     async def init(self, loop):
         raise NotImplementedError
@@ -7,7 +22,7 @@ class GenericMQAsyncManager:
     async def close(self):
         raise NotImplementedError
 
-    async def get_channel(self):
+    async def get_channel(self, code='default'):
         raise NotImplementedError
 
 

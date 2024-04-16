@@ -6,6 +6,7 @@ from functools import wraps
 from contextlib import asynccontextmanager
 
 from .aio_base import GenericMQAsyncClient
+from .aio_base import MQServerNotEnabled
 from tendril.config import MQ_ENABLED
 from tendril.config import APISERVER_ENABLED
 from tendril.utils.versions import get_namespace_package_names
@@ -19,22 +20,24 @@ if True:
     MQClientClass = aio.client_class
 
 
-def with_mq_client(func):
-    @wraps(func)
-    async def wrapper(*args, **kwargs):
-        if 'mq' in kwargs.keys() and kwargs['mq']:
-            result = await func(*args, **kwargs)
-            return result
-        manager = await MQManager.get_instance()
-        async with manager.get_channel() as channel:
-            mq = MQClientClass(channel)
-            kwargs['mq'] = mq
-            result = await func(*args, **kwargs)
-            return result
+def with_mq_client(code='default'):
+    def wrapper(func):
+        @wraps(func)
+        async def inner_wrapper(*args, **kwargs):
+            if 'mq' in kwargs.keys() and kwargs['mq']:
+                result = await func(*args, **kwargs)
+                return result
+            manager = await MQManager.get_instance()
+            async with manager.get_channel(code=code) as channel:
+                mq = MQClientClass(channel, code=code)
+                kwargs['mq'] = mq
+                result = await func(*args, **kwargs)
+                return result
+        return inner_wrapper
     return wrapper
 
 
-@with_mq_client  # Use the decorator to inject a client object
+@with_mq_client()  # Use the decorator to inject a client object
 async def example(mq: GenericMQAsyncClient):  # Accept a client object as an argument
     await mq.send_message("test", "Hello world")
     message = await mq.receive_message("test")
@@ -49,6 +52,8 @@ async def install_topology(prefix='tendril.core.topology'):
             if hasattr(globals()[modname], 'create_mq_topology'):
                 logger.debug(f"Installing MQ Topology from {modname}")
                 await globals()[modname].create_mq_topology()
+        except MQServerNotEnabled as e:
+            logger.debug(f"Skipping topology installation on disabled MQ Server {e.code}")
         except ImportError as e:
             logger.debug(e)
 
