@@ -53,7 +53,7 @@ async def install_topology(prefix='tendril.core.topology'):
                 logger.debug(f"Installing MQ Topology from {modname}")
                 await globals()[modname].create_mq_topology()
         except MQServerNotEnabled as e:
-            logger.debug(f"Skipping topology installation on disabled MQ Server {e.code}")
+            logger.info(f"Skipping topology installation on disabled MQ Server {e.code}")
         except ImportError as e:
             logger.debug(e)
 
