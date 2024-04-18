@@ -32,6 +32,13 @@ def _build_conn_string(p: ConnectionParameters):
            f"@{p.host}:{p.port}/{p.virtual_host}"
 
 
+def _pp(code):
+    if code == 'default':
+        return ''
+    else:
+        return code
+
+
 class RabbitMQAsyncManager(GenericMQAsyncManager):
     _instance = None
 
@@ -111,7 +118,7 @@ class RabbitMQAsyncClient(GenericMQAsyncClient):
 
     async def exchange(self):
         if not self._exchange:
-            mq_server_exchange = getattr(config, 'MQ{}_SERVER_EXCHANGE'.format(self._code))
+            mq_server_exchange = getattr(config, 'MQ{}_SERVER_EXCHANGE'.format(_pp(self._code)))
             self._exchange = await self.channel.get_exchange(mq_server_exchange)
         return self._exchange
 
