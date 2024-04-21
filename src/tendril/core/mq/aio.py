@@ -3,11 +3,11 @@
 import asyncio
 import importlib
 from functools import wraps
-from contextlib import asynccontextmanager
 
 from .aio_base import GenericMQAsyncClient
 from .aio_base import MQServerNotEnabled
-from tendril.config import MQ_ENABLED
+from tendril import config
+from tendril.config import MQ_SERVER_CODES
 from tendril.config import APISERVER_ENABLED
 from tendril.utils.versions import get_namespace_package_names
 from tendril.utils import log
@@ -69,13 +69,19 @@ async def shutdown():
     await manager.close()
 
 
-if MQ_ENABLED:
+def _enable():
     if APISERVER_ENABLED:
         # Register the startup and shutdown functions as app events
         from tendril.apiserver.core import apiserver
+
         apiserver.on_event("startup")(startup)
         apiserver.on_event("shutdown")(shutdown)
     else:
         asyncio.get_event_loop().run_until_complete(startup())
         # atexit.register(asyncio.run, shutdown())
-        pass
+
+
+for code in MQ_SERVER_CODES:
+    if getattr(config, 'MQ{}_ENABLED'.format(code)):
+        _enable()
+        break
